@@ -1,7 +1,7 @@
 #!/bin/vbash
 ##########################
 # v 2016.06.21
-# reproduce cisco IPSLA function on vyos
+# reproduce basic cisco IPSLA function on vyos
 # taken in part from http://forum.vyos.net/showthread.php?tid=26063
 ##########################
 source /opt/vyatta/etc/functions/script-template
