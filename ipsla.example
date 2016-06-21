@@ -1,69 +1,76 @@
-#!/bin/vbash
+#!/bin/bash
 ##########################
 # v 2016.06.21
-# reproduce basic cisco IPSLA function on vyos
+# reproduce cisco IPSLA function on vyos
 # taken in part from http://forum.vyos.net/showthread.php?tid=26063
 ##########################
-source /opt/vyatta/etc/functions/script-template
 
 # source interface
-interface=<eth1>
+interface=eth4
 
 # number of pings
-count=15
+count=1
 
-# IP address to monitor 
-monitor=<ip>
+# IP address to monitor
+monitor=172.16.62.161
 
 # action to take when test fails should be add/remove
-action=
+action=add
 
-# routes to add remove, comma delimited
-routes=
+# routes to add remove, comma delimited <ip/CIDR>
+routes=(172.16.60.128/27 172.16.60.32/27)
 
 # next hop gateway (applies to all routes)
-gwaddress=
+gwaddress=172.16.63.170
 
-[ ! -f /tmp/enable.cron ] && exit
+#[ ! -f /tmp/enable.cron ] && exit
 
-(
-    if ["$action" -eq add];then
+    if [ $action = "add" ]; then
+      upaction=delete
+      downaction=set
+    else
       upaction=set
       downaction=delete
-    else
-      upaction=delete
-      downaction=set      
     fi
-     flag=/tmp/target.up
-    recv=$(/bin/ping -c $cnt -I $interface -q -i 7 $monitor | grep received | cut -d, -f2 | awk '{print $1}')
+     flag=/tmp/`basename "$0"`-target.up
+     execute=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper
+
+    recv=$(/bin/ping -c $count -I $interface -q -i 7 $monitor | grep received | cut -d, -f2 | awk '{print $1}')
+
+
+# If no response
     if [ "$recv" -eq 0 ]; then
         if [ -f $flag ]; then
-            echo "$d target seems down now $(date)"
+            echo "`basename "$0"` target seems down now $(date)"
             rm -f $flag
-            configure
+	    $execute begin
              for route in "${routes[@]}"
-             do
-                 $downaction protocols static route $route next-hop $gwaddress
-             done
-                 commit
-                         exit
-                 exit
+              do
+                $execute  $downaction protocols static route $route next-hop $gwaddress
+              done
+                 $execute commit
+                 $execute end
             /usr/sbin/conntrack -F
             /usr/sbin/conntrack -F expect
         fi
     else
+# when there is a response and device was previously down
         if [ ! -f $flag ]; then
-            echo "$d target seems up now $(date)"
+            echo "`basename "$0"` target seems up now $(date)"
             touch $flag
-               configure
-               for route in "${routes[@]}"
-                do
-                 $upaction protocols static route $route next-hop $gwaddress
-               commit
-               exit
-               exit
+            $execute begin
+             for route in "${routes[@]}"
+              do
+		echo $upaction "protocols static route" $route "next-hop" $gwaddress
+                $execute  $upaction protocols static route $route next-hop $gwaddress
+              done
+		$execute commit
+		 $execute end
             /usr/sbin/conntrack -F
             /usr/sbin/conntrack -F expect
         fi
     fi
-) >>/tmp/yyy
+
+## fix permission problem created by wrapper
+
+chown -R root:vyattacfg /opt/vyatta/config/active
