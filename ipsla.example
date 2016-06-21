@@ -1,0 +1,69 @@
+#!/bin/vbash
+##########################
+# v 2016.06.21
+# reproduce cisco IPSLA function on vyos
+# taken in part from http://forum.vyos.net/showthread.php?tid=26063
+##########################
+source /opt/vyatta/etc/functions/script-template
+
+# source interface
+interface=<eth1>
+
+# number of pings
+count=15
+
+# IP address to monitor 
+monitor=<ip>
+
+# action to take when test fails should be add/remove
+action=
+
+# routes to add remove, comma delimited
+routes=
+
+# next hop gateway (applies to all routes)
+gwaddress=
+
+[ ! -f /tmp/enable.cron ] && exit
+
+(
+    if ["$action" -eq add];then
+      upaction=set
+      downaction=delete
+    else
+      upaction=delete
+      downaction=set      
+    fi
+     flag=/tmp/target.up
+    recv=$(/bin/ping -c $cnt -I $interface -q -i 7 $monitor | grep received | cut -d, -f2 | awk '{print $1}')
+    if [ "$recv" -eq 0 ]; then
+        if [ -f $flag ]; then
+            echo "$d target seems down now $(date)"
+            rm -f $flag
+            configure
+             for route in "${routes[@]}"
+             do
+                 $downaction protocols static route $route next-hop $gwaddress
+             done
+                 commit
+                         exit
+                 exit
+            /usr/sbin/conntrack -F
+            /usr/sbin/conntrack -F expect
+        fi
+    else
+        if [ ! -f $flag ]; then
+            echo "$d target seems up now $(date)"
+            touch $flag
+               configure
+               for route in "${routes[@]}"
+                do
+                 $upaction protocols static route $route next-hop $gwaddress
+               commit
+               exit
+               exit
+            /usr/sbin/conntrack -F
+            /usr/sbin/conntrack -F expect
+        fi
+    fi
+) >>/tmp/yyy
