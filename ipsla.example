@@ -3,13 +3,18 @@
 # v 2016.06.21
 # reproduce cisco IPSLA function on vyos
 # taken in part from http://forum.vyos.net/showthread.php?tid=26063
+#
+# Add to Crontab to run as often as you need
 ##########################
+
+
+# Configuration #
 
 # source interface
 interface=<eth4>
 
 # number of pings
-count=1
+count=10
 
 # IP address to monitor
 monitor=<IP>
@@ -23,54 +28,63 @@ routes=(<IP>/<CIDR> <IP>/<CIDR>)
 # next hop gateway (applies to all routes)
 gwaddress=<IP>
 
-#[ ! -f /tmp/enable.cron ] && exit
+#interval between pings
+interval=5
+
+# Configuration end #
 
     if [ $action = "add" ]; then
       upaction=delete
       downaction=set
+      upnexthop= 
+      downnexthop="next-hop $gwaddress"
     else
       upaction=set
       downaction=delete
+      downnexthop=         
+      upnexthop="next-hop $gwaddress"
+
     fi
      flag=/tmp/`basename "$0"`-target.up
      execute=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper
 
-    recv=$(/bin/ping -c $count -I $interface -q -i 7 $monitor | grep received | cut -d, -f2 | awk '{print $1}')
+    recv=$(/bin/ping -c $count -I $interface -q -i $interval $monitor | grep received | cut -d, -f2 | awk '{print $1}')
 
 
 # If no response
     if [ "$recv" -eq 0 ]; then
         if [ -f $flag ]; then
-            echo "`basename "$0"` target seems down now $(date)"
+            logger "`basename "$0"` target seems down now, failover routes have been" $downaction
             rm -f $flag
 	    $execute begin
              for route in "${routes[@]}"
               do
-                $execute  $downaction protocols static route $route next-hop $gwaddress
+                $execute  $downaction protocols static route $route $downnexthop
               done
                  $execute commit
                  $execute end
-            /usr/sbin/conntrack -F
-            /usr/sbin/conntrack -F expect
+            /usr/sbin/conntrack -F > /dev/null 2>&1
+            /usr/sbin/conntrack -F expect > /dev/null 2>&1
         fi
     else
 # when there is a response and device was previously down
         if [ ! -f $flag ]; then
-            echo "`basename "$0"` target seems up now $(date)"
+            logger "`basename "$0"` target seems up now, failover route have been" $upaction
             touch $flag
             $execute begin
              for route in "${routes[@]}"
               do
-		echo $upaction "protocols static route" $route "next-hop" $gwaddress
-                $execute  $upaction protocols static route $route next-hop $gwaddress
+                $execute  $upaction protocols static route $route $upnexthop
               done
 		$execute commit
 		 $execute end
-            /usr/sbin/conntrack -F
-            /usr/sbin/conntrack -F expect
+            /usr/sbin/conntrack -F > /dev/null 2>&1
+            /usr/sbin/conntrack -F > /dev/null 2>&1
         fi
     fi
 
 ## fix permission problem created by wrapper
 
 chown -R root:vyattacfg /opt/vyatta/config/active
+
+
