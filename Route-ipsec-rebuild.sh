@@ -7,9 +7,9 @@
 ##########################
 # Configuration #
 # IP address to monitor
-monitor=100.124.70.254
+monitor=<ip>
 # next hop gateway (applies to all routes)
-vti=vti0
+vti=<vti#>
 # Configuration end #
 
     execute=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper
