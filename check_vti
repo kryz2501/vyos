@@ -1,0 +1,49 @@
+##!/bin/bash
+##########################
+# v 2019.07.4
+# Bodge script to clear and rebuild routed vpn tunnels requiring initial static for bgp.
+# save to /config/scripts/check_vti
+# schedule using system scheduler like this:
+#set system task-scheduler task check_vti0 executable arguments '<remote router> <vti_int> <ipsec_peer_ip>'
+#set system task-scheduler task check_vti0 executable path '/config/scripts/check_vti'
+#set system task-scheduler task check_vti0 interval '5'
+##########################
+# Configuration #
+# IP address to monitor
+monitor=$1
+# next hop gateway (applies to all routes)
+vti=$2
+# IPsec peer
+peer=$3
+# Configuration end #
+
+    cfg=/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper
+    op=/opt/vyatta/bin/vyatta-op-cmd-wrapper
+    vrrp=$($op show vrrp | egrep -c MASTER)
+    vpn_reset=/tmp/vpnreset_$vti
+if [ "$vrrp" -eq 0 ]; then
+        exit 0
+else
+        recv=$(/bin/ping -c 2 -q -i 1 $monitor | grep received | cut -d, -f2 | awk '{print $1}')
+# If no response
+    if [ "$recv" -eq 0 ]; then
+        if test -f "$vpn_reset"; then
+           logger "`basename "$monitor"` seems down, vpn has been reset, rebuilding routes"
+             $cfg begin
+             $cfg delete protocols static interface-route $monitor/32
+             $cfg commit
+            # now lets drop the route back in
+             $cfg set protocols static interface-route $monitor/32 next-hop-interface $vti
+              $cfg commit
+             $execute end
+             rm $vpn_reset
+        else
+            logger "`basename "$monitor"` seems down now, vpn will be reset"
+              $op reset vpn ipsec-peer $peer
+              echo reset >> $vpn_reset
+        fi
+     fi
+fi
+## fix permission problem created by wrapper
+
+chown -R root:vyattacfg /opt/vyatta/config/active
